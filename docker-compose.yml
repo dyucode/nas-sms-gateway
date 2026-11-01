@@ -1,0 +1,35 @@
+services:
+  smsgw:
+    build: .
+    image: smsgw:0.2.0
+    container_name: smsgw
+    restart: unless-stopped
+    # Root is needed to open the USB node (crw------- root). Everything else is locked down.
+    user: "0:0"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs: ["/tmp"]
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - ./data:/data
+    device_cgroup_rules:
+      - "c 189:* rmw"
+    secrets:
+      - chat_webhook_url
+      - telegram
+    environment:
+      TZ: "${TZ:-UTC}"   # set your timezone, e.g. TZ=Europe/Berlin docker compose up -d
+      POLL_INTERVAL: "10"
+      RETENTION_DAYS: "14"
+      FIRST_RUN_BACKLOG: "notify"   # set to "skip" to not announce SMS already stored on the SIM
+      # CHAT_INSECURE_TLS: "1"      # only if the webhook is https://<LAN-IP>:5001 with a self-signed cert
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "3"}
+    # no ports published: the container only makes outbound calls
+secrets:
+  chat_webhook_url:
+    file: ./secrets/chat_webhook_url.txt
+  telegram:   # 2 lines: bot token, chat id. Empty file = Telegram disabled.
+    file: ./secrets/telegram.txt

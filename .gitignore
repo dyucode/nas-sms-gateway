@@ -1,0 +1,10 @@
+secrets/*
+!secrets/.keep
+data/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.zip
+*.log
+run.txt
+chatid.txt
