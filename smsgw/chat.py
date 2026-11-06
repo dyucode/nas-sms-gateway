@@ -6,6 +6,7 @@ secret), never logged, and error messages only ever mention the host.
 
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import logging
@@ -16,11 +17,23 @@ import urllib.parse
 import urllib.request
 from typing import Optional
 
+from .errors import DeliveryError
+
 log = logging.getLogger("smsgw.chat")
 
+# HTTP statuses that mean "this message", not "this channel".
+_MESSAGE_STATUSES = (400, 413, 414, 422)
 
-class ChatError(Exception):
+
+class ChatError(DeliveryError):
     pass
+
+
+def _rejection_code(reply) -> Optional[int]:
+    """Synology's numeric error code, which tells rate limits from bad tokens etc."""
+    error = reply.get("error") if isinstance(reply, dict) else None
+    code = error.get("code") if isinstance(error, dict) else None
+    return code if isinstance(code, int) else None
 
 
 def _is_private_host(host: str) -> bool:
@@ -72,16 +85,19 @@ class ChatClient:
             with urllib.request.urlopen(req, timeout=self._timeout, context=self._ctx) as resp:
                 data = resp.read(4096)
         except urllib.error.HTTPError as e:
-            raise ChatError(f"Chat at {self.host} returned HTTP {e.code}") from None
-        except (urllib.error.URLError, OSError, ssl.SSLError) as e:
+            raise ChatError(f"Chat at {self.host} returned HTTP {e.code}",
+                            transient=e.code not in _MESSAGE_STATUSES) from None
+        except (urllib.error.URLError, OSError, ssl.SSLError, http.client.HTTPException) as e:
             reason = getattr(e, "reason", e)
             raise ChatError(f"cannot reach Chat at {self.host}: {type(reason).__name__}") from None
         try:
-            ok = json.loads(data.decode("utf-8", "replace")).get("success") is True
-        except (ValueError, AttributeError):
-            ok = False
-        if not ok:
-            raise ChatError(f"Chat at {self.host} rejected the message")
+            reply = json.loads(data.decode("utf-8", "replace"))
+        except ValueError:
+            reply = None
+        if not isinstance(reply, dict) or reply.get("success") is not True:
+            code = _rejection_code(reply)
+            detail = f" (code {code})" if code is not None else ""
+            raise ChatError(f"Chat at {self.host} rejected the message{detail}", transient=False)
 
 
 def format_message(sender: str, ts: str, text: str, incomplete: bool = False) -> str:

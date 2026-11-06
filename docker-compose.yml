@@ -1,7 +1,7 @@
 services:
   smsgw:
     build: .
-    image: smsgw:0.2.0
+    image: smsgw:0.2.2
     container_name: smsgw
     restart: unless-stopped
     # Root is needed to open the USB node (crw------- root). Everything else is locked down.
@@ -23,10 +23,19 @@ services:
       POLL_INTERVAL: "10"
       RETENTION_DAYS: "14"
       FIRST_RUN_BACKLOG: "notify"   # set to "skip" to not announce SMS already stored on the SIM
+      DELETE_DELIVERED: "0"         # "1" = delete SMS from the modem once every channel confirmed them
       # CHAT_INSECURE_TLS: "1"      # only if the webhook is https://<LAN-IP>:5001 with a self-signed cert
-    logging:
-      driver: json-file
-      options: {max-size: "5m", max-file: "3"}
+      # DELIVERY_ALERT_AFTER: "900" # alert when an SMS has waited this many seconds
+      # STORAGE_ALERT_PCT: "80"     # alert when a modem storage is this full
+      # HEARTBEAT_URL: "..."        # dead-man's switch (see README); it is a secret
+    healthcheck:
+      test: ["CMD", "python", "-m", "smsgw", "--health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    # No "logging:" section on purpose: on Synology, DSM's default driver is what fills the Log tab
+    # in Container Manager. On other hosts you may want json-file with max-size and max-file.
     # no ports published: the container only makes outbound calls
 secrets:
   chat_webhook_url:

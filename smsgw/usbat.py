@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import List, Optional, Protocol
+from typing import List, Protocol
 
 from . import atguard
 
@@ -36,11 +36,14 @@ class UsbTransport:
 
         self._usb_core = usb.core
         self._usb_util = usb.util
-        dev = usb.core.find(idVendor=vid, idProduct=pid)
-        if dev is None:
-            raise UsbError(f"USB device {vid:04x}:{pid:04x} not found")
+        try:
+            dev = usb.core.find(idVendor=vid, idProduct=pid)
+            if dev is None:
+                raise UsbError(f"USB device {vid:04x}:{pid:04x} not found")
+            cfg = dev.get_active_configuration()
+        except (ValueError, usb.core.USBError) as e:  # NoBackendError is a ValueError
+            raise UsbError(f"cannot open USB device {vid:04x}:{pid:04x}: {type(e).__name__}") from e
         self._dev = dev
-        cfg = dev.get_active_configuration()
         intf = None
         for candidate in cfg:
             if candidate.bInterfaceNumber == iface and candidate.bAlternateSetting == 0:
@@ -114,8 +117,9 @@ class AtChannel:
     FINAL_OK = ("OK",)
     FINAL_ERR_PREFIX = ("ERROR", "+CME ERROR", "+CMS ERROR", "NO CARRIER")
 
-    def __init__(self, transport: Transport):
+    def __init__(self, transport: Transport, allow_delete: bool = False):
         self._t = transport
+        self._allow_delete = allow_delete
         self._buf = b""
         self.urc: List[str] = []
 
@@ -136,7 +140,7 @@ class AtChannel:
 
     def command(self, cmd: str, timeout: float = 8.0) -> List[str]:
         """Send an allow-listed command; return response lines (without echo/OK)."""
-        norm = atguard.check(cmd)
+        norm = atguard.check(cmd, allow_delete=self._allow_delete)
         self._drain()
         self._t.write(norm.encode("ascii") + b"\r")
         deadline = time.monotonic() + timeout

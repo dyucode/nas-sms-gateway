@@ -150,7 +150,7 @@ def test_never_sends_forbidden_commands_during_normal_run(env):
     gw, modem, *_ = env
     modem.add("ME", deliver("+1555", "x"))
     gw.poll_once()
-    assert set(modem.sent) <= {"ATE0", "AT+CMGF=0", "AT+CPIN?", 'AT+CPMS="ME"', 'AT+CPMS="SM"', "AT+CMGL=4"}
+    assert set(modem.sent) <= {"ATE0", "AT+CMGF=0", "AT+CPIN?", 'AT+CPMS="ME"', 'AT+CPMS="SM"', "AT+CPMS?", "AT+CMGL=4"}
 
 
 def test_first_run_skip_backlog(tmp_path):

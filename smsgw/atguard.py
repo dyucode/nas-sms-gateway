@@ -5,9 +5,13 @@ by an allowed pattern raises ``ForbiddenCommand`` *before* it reaches USB.
 
 The list contains only read-only queries plus two harmless session settings:
 selecting PDU mode and selecting which message storage to read from. There is
-deliberately no pattern for sending (CMGS/CMSS), writing (CMGW), deleting
-(CMGD), eSIM/APDU access (CSIM/CRSM/CGLA/QESIM...), or vendor configuration
-(QCFG/QPRTPARA/...). Identifiers such as IMEI/IMSI/ICCID are not queried.
+deliberately no pattern for sending (CMGS/CMSS), writing (CMGW), eSIM/APDU access
+(CSIM/CRSM/CGLA/QESIM...), or vendor configuration (QCFG/QPRTPARA/...).
+Identifiers such as IMEI/IMSI/ICCID are not queried.
+
+Deleting is refused too, unless the caller passes ``allow_delete=True`` (only when
+``DELETE_DELIVERED=1`` is set). Even then only one message can be deleted at a time
+by its index: the bulk forms such as ``AT+CMGD=1,4`` stay forbidden.
 """
 
 from __future__ import annotations
@@ -28,13 +32,14 @@ _ALLOWED = [
     r"AT\+CMGL=4",
 ]
 _PATTERNS = [re.compile(rf"^{p}$") for p in _ALLOWED]
+_DELETE_ONE = re.compile(r"^AT\+CMGD=\d{1,4}$")
 
 
 class ForbiddenCommand(Exception):
     """Raised when code tries to send an AT command that is not allow-listed."""
 
 
-def check(cmd: str) -> str:
+def check(cmd: str, allow_delete: bool = False) -> str:
     """Return ``cmd`` normalised (stripped, no CR/LF) if allowed, else raise."""
     if any(ch in cmd for ch in "\r\n\x00\x1a\x1b"):
         raise ForbiddenCommand("control characters are not allowed in AT commands")
@@ -42,4 +47,6 @@ def check(cmd: str) -> str:
     for pat in _PATTERNS:
         if pat.match(norm):
             return norm
+    if allow_delete and _DELETE_ONE.match(norm):
+        return norm
     raise ForbiddenCommand(f"AT command not allow-listed: {norm.split('=')[0][:16]}")

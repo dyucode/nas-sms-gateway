@@ -4,6 +4,9 @@ data/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ruff_cache/
+.venv/
+.coverage
 *.zip
 *.log
 run.txt

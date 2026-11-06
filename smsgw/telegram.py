@@ -7,6 +7,7 @@ the URL (which contains the token) or the message body.
 
 from __future__ import annotations
 
+import http.client
 import json
 import logging
 import re
@@ -16,6 +17,8 @@ import urllib.parse
 import urllib.request
 from typing import List, Optional, Tuple
 
+from .errors import DeliveryError
+
 log = logging.getLogger("smsgw.telegram")
 
 API = "https://api.telegram.org"
@@ -23,7 +26,7 @@ _TOKEN_RE = re.compile(r"^\d{6,12}:[A-Za-z0-9_-]{30,50}$")
 _CHAT_RE = re.compile(r"^-?\d{1,20}$")
 
 
-class TelegramError(Exception):
+class TelegramError(DeliveryError):
     pass
 
 
@@ -50,8 +53,9 @@ def _call(api: str, token: str, method: str, params: dict, timeout: float, ctx) 
         with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
             data = resp.read(1 << 20)
     except urllib.error.HTTPError as e:
-        raise TelegramError(f"Telegram returned HTTP {e.code}") from None
-    except (urllib.error.URLError, OSError, ssl.SSLError) as e:
+        # 400 is about this message; 401/403/429/5xx affect every message.
+        raise TelegramError(f"Telegram returned HTTP {e.code}", transient=e.code != 400) from None
+    except (urllib.error.URLError, OSError, ssl.SSLError, http.client.HTTPException) as e:
         reason = getattr(e, "reason", e)
         raise TelegramError(f"cannot reach Telegram: {type(reason).__name__}") from None
     try:
@@ -59,7 +63,7 @@ def _call(api: str, token: str, method: str, params: dict, timeout: float, ctx) 
     except ValueError:
         out = {}
     if not isinstance(out, dict) or out.get("ok") is not True:
-        raise TelegramError("Telegram rejected the request")
+        raise TelegramError("Telegram rejected the request", transient=False)
     return out
 
 

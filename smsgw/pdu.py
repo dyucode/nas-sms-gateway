@@ -160,6 +160,8 @@ def decode(pdu_hex: str) -> Sms:
         i = 1
         while i + 1 < header_len:
             iei, ielen = ud[i], ud[i + 1]
+            if i + 2 + ielen > header_len:
+                raise PduError("UDH element overruns the header")
             body = ud[i + 2 : i + 2 + ielen]
             if iei == 0x00 and ielen == 3:
                 concat = (body[0], body[1], body[2])

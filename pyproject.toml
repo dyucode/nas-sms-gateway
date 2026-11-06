@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["integration: real components working together (HTTP, SQLite, threads, processes)"]
+
+[tool.coverage.run]
+source = ["smsgw"]
+branch = true
